@@ -22,8 +22,8 @@ int main(int argc, char* argv[])
 	//double MinNum, MaxNum;
 
 	Mat scr_gray, MaskImg_gray;
-	Mat src = imread("样品_x3.jpg");
-	Mat MaskImg = imread("光照校正_x3.jpg");
+	Mat src = imread("E9 A_x3.jpg");
+	Mat MaskImg = imread("白_x3.jpg");
 	int ThresNum,j;
 	double t = static_cast<double>(getTickCount());
 	cvtColor(src, scr_gray, CV_RGB2GRAY);
@@ -34,37 +34,97 @@ int main(int argc, char* argv[])
 	equalizeHist(DImg, EqualizeImg);
 	Histogram1D h;
 	cv::MatND histo = h.getHistogram(EqualizeImg);
-	vector<float> num;
+	vector<Point> num;
+	Point histopoint;
 	for (int i = 1; i < 256; i++)
 	{
 		if (histo.at<float>(i) != 0)
 		{
-			num.push_back(histo.at<float>(i));
+			histopoint.x = histo.at<float>(i);
+			histopoint.y = i;
+			num.push_back(histopoint);
 		}
 		cout << "Value" << i << "=" << histo.at<float>(i) << endl;
 	}
 		
 	for (int i = 1; i < num.size(); i++)
 	{
-		if (num[i] < num[i-1])
-			if (num[i] < num[i+1])
+		if (num[i].x < num[i-1].x)
+			if (num[i].x < num[i+1].x)
 			{
-			j = i;
-			break;
+				ThresNum = num[i].y;
+				j = i;
+				break;
 			}
 	}
-	for (int i = 0; i < 256; i++)
-	{
-		if (num[j] == histo.at<float>(i))
-		{
-			ThresNum = i;
-			break;
-		}
-	}
+	//for (int i = 0; i < 256; i++)
+	//{
+	//	if (num[j] == histo.at<float>(i))
+	//	{
+	//		ThresNum = i;
+	//		break;
+	//	}
+	//}
 	
 	Mat ThresholdImg;
 	//adaptiveThreshold(EqualizeImg, ThresholdImg, 255.0, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY_INV,35,55);
 	threshold(EqualizeImg, ThresholdImg, ThresNum, 255, CV_THRESH_BINARY);
+	//subtract(Scalar(255), ThresholdImg, ThresholdImg);
+	Mat findrect;
+	findrect = ~ThresholdImg;
+	vector<vector<cv::Point>> contours;
+	cv::findContours(findrect, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
+
+	// 寻找最大连通域  
+	double maxArea = 0;
+	vector<cv::Point> maxContour;
+	for (size_t i = 0; i < contours.size(); i++)
+	{
+		double area = cv::contourArea(contours[i]);
+		if (area > maxArea)
+		{
+			maxArea = area;
+			maxContour = contours[i];
+		}
+	}
+
+	// 将轮廓转为矩形框  
+	cv::Rect maxRect = cv::boundingRect(maxContour);
+	//CvPoint pt0 = cvPoint(0, 0);
+	//CvPoint pt3 = cvPoint(EqualizeImg.cols, EqualizeImg.rows);
+	CvPoint pt1 = cvPoint(maxRect.x, maxRect.y);
+	CvPoint pt2 = cvPoint(maxRect.x + maxRect.width, maxRect.y + maxRect.height);
+	Mat ContourImg = Mat(EqualizeImg.rows, EqualizeImg.cols,CV_8U,Scalar(255));
+	rectangle(ContourImg, pt1, pt2, Scalar(0), -1, 8);
+	bitwise_or(scr_gray, ContourImg, scr_gray);//清除轨道干扰
+
+
+
+	Mat CalImg = scr_gray(Range::all(), Range(1,1));//垂直投影
+	CvPoint pt3 = cvPoint(maxRect.x-1,0);
+	CvPoint pt4 = cvPoint(maxRect.x + maxRect.width-1, 0);
+	CvPoint pt5 = cvPoint(0, 0);
+	CvPoint pt6 = cvPoint(EqualizeImg.rows, 0);
+    reduce(scr_gray, CalImg, 0, CV_REDUCE_AVG);
+	rectangle(CalImg, pt5, pt3, Scalar(0), -1, 8);
+	rectangle(CalImg, pt4, pt6, Scalar(0), -1, 8);
+	double min, max;
+	minMaxLoc(CalImg, &min, &max);
+	int LightMax = max;
+	Mat LightPlus(CalImg.rows, CalImg.cols,CV_8U,Scalar(LightMax));
+	absdiff(LightPlus, CalImg, LightPlus);
+	rectangle(LightPlus, pt5, pt3, Scalar(0), -1, 8);
+	rectangle(LightPlus, pt4, pt6, Scalar(0), -1, 8);
+	Mat Light;
+	for (int i = 0; i < 11000; i++)
+	{
+		Light.push_back(LightPlus);
+	}
+	add(scr_gray, Light, scr_gray);
+
+
+
+
 	imwrite("DImg.jpg", DImg);
 	imwrite("EqualizeImg.jpg", EqualizeImg);
 	imwrite("ThresholdImg.jpg", ThresholdImg);
@@ -226,6 +286,5 @@ int main(int argc, char* argv[])
 	PointOne.clear();
 	PointTwo.clear();
 	PointLast.clear();
-
 	return 0;
 }
