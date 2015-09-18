@@ -98,29 +98,40 @@ int main(int argc, char* argv[])
 	rectangle(ContourImg, pt1, pt2, Scalar(0), -1, 8);
 	bitwise_or(scr_gray, ContourImg, scr_gray);//清除轨道干扰
 
+	cv::Point2f center = cv::Point2f(190,9587);
+	double angle = -0.3973;  // 旋转角度  
+	double k = 1; // 缩放尺度 
+	Mat ImgROI = scr_gray(Rect(pt1, pt2));
+	Mat rotateMat;
+	rotateMat = cv::getRotationMatrix2D(center, angle, k);
+	Mat rotateImg;
+	warpAffine(ImgROI, rotateImg, rotateMat, ImgROI.size());
+	Mat MaskImgone = Mat(EqualizeImg.rows, EqualizeImg.cols, CV_8U, Scalar(255));
+	bitwise_or(scr_gray, MaskImgone, scr_gray);
+	rotateImg.copyTo(ImgROI);
 
-
-	Mat CalImg = scr_gray(Range::all(), Range(1,1));//垂直投影
-	CvPoint pt3 = cvPoint(maxRect.x-1,0);
-	CvPoint pt4 = cvPoint(maxRect.x + maxRect.width-1, 0);
-	CvPoint pt5 = cvPoint(0, 0);
-	CvPoint pt6 = cvPoint(EqualizeImg.rows, 0);
-    reduce(scr_gray, CalImg, 0, CV_REDUCE_AVG);
-	rectangle(CalImg, pt5, pt3, Scalar(0), -1, 8);
-	rectangle(CalImg, pt4, pt6, Scalar(0), -1, 8);
+	Mat CalImg = ImgROI(Range::all(), Range(1, 1));//垂直投影，光照矫正
+	//CvPoint pt3 = cvPoint(maxRect.x-1,0);
+	//CvPoint pt4 = cvPoint(maxRect.x + maxRect.width-1, 0);
+	//CvPoint pt5 = cvPoint(0, 0);
+	//CvPoint pt6 = cvPoint(EqualizeImg.rows, 0);
+	reduce(ImgROI, CalImg, 0, CV_REDUCE_AVG);
+	//rectangle(CalImg, pt5, pt3, Scalar(0), -1, 8);
+	//rectangle(CalImg, pt4, pt6, Scalar(0), -1, 8);
 	double min, max;
 	minMaxLoc(CalImg, &min, &max);
 	int LightMax = max;
 	Mat LightPlus(CalImg.rows, CalImg.cols,CV_8U,Scalar(LightMax));
 	absdiff(LightPlus, CalImg, LightPlus);
-	rectangle(LightPlus, pt5, pt3, Scalar(0), -1, 8);
-	rectangle(LightPlus, pt4, pt6, Scalar(0), -1, 8);
+	//rectangle(LightPlus, pt5, pt3, Scalar(0), -1, 8);
+	//rectangle(LightPlus, pt4, pt6, Scalar(0), -1, 8);
 	Mat Light;
-	for (int i = 0; i < 11000; i++)
+	for (int i = 0; i < ImgROI.rows; i++)
 	{
 		Light.push_back(LightPlus);
 	}
-	add(scr_gray, Light, scr_gray);
+	//Mat PoccessImg = ImgROI;
+	add(ImgROI, Light, ImgROI);
 
 
 
