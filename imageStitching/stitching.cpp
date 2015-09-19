@@ -7,7 +7,7 @@
 #include "Histogram1D.h" 
 #include "vector"
 #include <cxcore.h>
-
+#include <math.h>
 
 using namespace std;
 using namespace cv;
@@ -70,6 +70,17 @@ int main(int argc, char* argv[])
 	//adaptiveThreshold(EqualizeImg, ThresholdImg, 255.0, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY_INV,35,55);
 	threshold(EqualizeImg, ThresholdImg, ThresNum, 255, CV_THRESH_BINARY);
 	//subtract(Scalar(255), ThresholdImg, ThresholdImg);
+	Mat DilateImg = getStructuringElement(MORPH_RECT,Size(15,15));
+	dilate(ThresholdImg, ThresholdImg, DilateImg);
+	erode(ThresholdImg, ThresholdImg, DilateImg);
+	erode(ThresholdImg, ThresholdImg, DilateImg);
+	dilate(ThresholdImg, ThresholdImg, DilateImg);
+
+
+	//Mat DilateImgtwo = getStructuringElement(MORPH_RECT, Size(5, 5));
+	//dilate(ThresholdImg, ThresholdImg, DilateImgtwo);
+	//erode(ThresholdImg, ThresholdImg, DilateImgtwo);
+
 	Mat findrect;
 	findrect = ~ThresholdImg;
 	vector<vector<cv::Point>> contours;
@@ -88,6 +99,14 @@ int main(int argc, char* argv[])
 		}
 	}
 
+	double S = contourArea(maxContour);
+	double C = arcLength(maxContour,true);
+	double disc = pow(0.5*C, 2) - 4 * S;
+	double a1 = (0.5*C + sqrt(disc)) / 2;
+	double a2 = (0.5*C - sqrt(disc)) / 2;
+
+
+
 	// 将轮廓转为矩形框  
 	cv::Rect maxRect = cv::boundingRect(maxContour);
 	//CvPoint pt0 = cvPoint(0, 0);
@@ -98,10 +117,27 @@ int main(int argc, char* argv[])
 	rectangle(ContourImg, pt1, pt2, Scalar(0), -1, 8);
 	bitwise_or(scr_gray, ContourImg, scr_gray);//清除轨道干扰
 
-	cv::Point2f center = cv::Point2f(190,9587);
+	Mat ImgROI = scr_gray(Rect(pt1, pt2));//寻找旋转参数
+	cv::Point2f center;
+
+	//CvPoint pt3 = cvPoint(100, ImgROI.rows);
+	//CvPoint pt4 = cvPoint(0, ImgROI.rows-100);
+	//CvPoint pt5 = cvPoint(ImgROI.cols, ImgROI.rows-150);
+	//CvPoint pt6 = cvPoint(ImgROI.cols, ImgROI.rows);
+
+	//Mat SpliROI = ImgROI(Rect(pt4,pt3));
+	//Mat MaxImg = SpliROI(Range::all(), Range(1, 1));
+	//reduce(ImgROI, MaxImg, 0, CV_REDUCE_MIN);
+	//int Colnum = countNonZero(MaxImg);
+	//Mat ColImg = SpliROI.colRange(Colnum, Colnum).clone();
+	center.x = 194;
+	center.y = 9575;
+
+	//Mat ZeroROI = ImgROI(Rect(pt5, pt6));
+	//int AngleH = countNonZero(ZeroROI);
 	double angle = -0.3973;  // 旋转角度  
 	double k = 1; // 缩放尺度 
-	Mat ImgROI = scr_gray(Rect(pt1, pt2));
+	
 	Mat rotateMat;
 	rotateMat = cv::getRotationMatrix2D(center, angle, k);
 	Mat rotateImg;
@@ -120,20 +156,37 @@ int main(int argc, char* argv[])
 	//rectangle(CalImg, pt4, pt6, Scalar(0), -1, 8);
 	double min, max;
 	minMaxLoc(CalImg, &min, &max);
-	int LightMax = max;
-	Mat LightPlus(CalImg.rows, CalImg.cols,CV_8U,Scalar(LightMax));
-	absdiff(LightPlus, CalImg, LightPlus);
+	int Maxrows = max;
+	Mat LightPlusrows(CalImg.rows, CalImg.cols,CV_8U,Scalar(Maxrows));
+	absdiff(LightPlusrows, CalImg, LightPlusrows);//找出补偿值
 	//rectangle(LightPlus, pt5, pt3, Scalar(0), -1, 8);
 	//rectangle(LightPlus, pt4, pt6, Scalar(0), -1, 8);
 	Mat Light;
-	for (int i = 0; i < ImgROI.rows; i++)
+	for (int i = 0; i < ImgROI.rows; i++)//构建补偿矩阵
 	{
-		Light.push_back(LightPlus);
+		Light.push_back(LightPlusrows);
 	}
 	//Mat PoccessImg = ImgROI;
-	add(ImgROI, Light, ImgROI);
+	add(ImgROI, Light, ImgROI);//光照补偿
 
 
+
+
+	Mat CalImgone = ImgROI(Range(1, 1), Range::all());//水平投影，光照矫正
+	reduce(ImgROI, CalImgone, 1, CV_REDUCE_AVG);
+	minMaxLoc(CalImgone, &min, &max);
+	int Maxcols = max;
+	Mat LightPluscols(CalImgone.rows, CalImgone.cols, CV_8U, Scalar(Maxcols));
+	absdiff(LightPluscols, CalImgone, LightPluscols);//找出补偿值
+	LightPluscols = LightPluscols.t();
+	Mat Lightcols;
+	for (int i = 0; i < ImgROI.cols; i++)//构建补偿矩阵
+	{
+		Lightcols.push_back(LightPluscols);
+	}
+	Lightcols = Lightcols.t();
+	//Mat PoccessImg = ImgROI;
+	add(ImgROI, Lightcols, ImgROI);//光照补偿
 
 
 	imwrite("DImg.jpg", DImg);
