@@ -13,6 +13,12 @@ using namespace std;
 using namespace cv;
 
 
+bool SortByM1(const Point &v1, const Point &v2)//注意：本函数的参数的类型一定要与vector中元素的类型一致  
+{
+	return v1.x < v2.x;//升序排列  
+}
+
+
 int main(int argc, char* argv[])
 {
 	int BufferWriteIndex = 0;
@@ -21,15 +27,17 @@ int main(int argc, char* argv[])
 	int delta = 0;
 	//double MinNum, MaxNum;
 
-	Mat scr_gray, MaskImg_gray;
-	Mat src = imread("E9 A_x3.jpg");
+	Mat scr_gray, MaskRect_gray;
+	Mat src = imread("A9划痕凹点_x3.jpg");
 	Mat MaskImg = imread("白_x3.jpg");
-	int ThresNum,j;
+	Mat MaskRect = MaskImg(Rect(0,0,4096, 10000));
+	int ThresNum,j = 0;
 	double t = static_cast<double>(getTickCount());
 	cvtColor(src, scr_gray, CV_RGB2GRAY);
-	cvtColor(MaskImg, MaskImg_gray, CV_RGB2GRAY);
+	cvtColor(MaskRect, MaskRect_gray, CV_RGB2GRAY);
 	Mat DImg;
-	subtract(MaskImg_gray, scr_gray, DImg);
+	subtract(MaskRect_gray, scr_gray, DImg);
+	//bitwise_not(scr_gray, scr_gray);
 	Mat EqualizeImg;
 	equalizeHist(DImg, EqualizeImg);
 	Histogram1D h;
@@ -53,7 +61,6 @@ int main(int argc, char* argv[])
 			if (num[i].x < num[i+1].x)
 			{
 				ThresNum = num[i].y;
-				j = i;
 				break;
 			}
 	}
@@ -116,7 +123,8 @@ int main(int argc, char* argv[])
 	Mat ContourImg = Mat(EqualizeImg.rows, EqualizeImg.cols,CV_8U,Scalar(255));
 	rectangle(ContourImg, pt1, pt2, Scalar(0), -1, 8);
 	bitwise_or(scr_gray, ContourImg, scr_gray);//清除轨道干扰
-
+	//CvPoint pt3 = cvPoint(maxRect.x, maxRect.y+400);
+	//CvPoint pt4 = cvPoint(maxRect.x + maxRect.width, maxRect.y + maxRect.height-400);
 	Mat ImgROI = scr_gray(Rect(pt1, pt2));//寻找旋转参数
 	cv::Point2f center;
 
@@ -132,8 +140,6 @@ int main(int argc, char* argv[])
 	//Mat ColImg = SpliROI.colRange(Colnum, Colnum).clone();
 	center.x = 194;
 	center.y = 9575;
-
-	//Mat ZeroROI = ImgROI(Rect(pt5, pt6));
 	//int AngleH = countNonZero(ZeroROI);
 	double angle = -0.3973;  // 旋转角度  
 	double k = 1; // 缩放尺度 
@@ -141,10 +147,13 @@ int main(int argc, char* argv[])
 	Mat rotateMat;
 	rotateMat = cv::getRotationMatrix2D(center, angle, k);
 	Mat rotateImg;
+	//bitwise_not(ImgROI, ImgROI);
 	warpAffine(ImgROI, rotateImg, rotateMat, ImgROI.size());
-	Mat MaskImgone = Mat(EqualizeImg.rows, EqualizeImg.cols, CV_8U, Scalar(255));
-	bitwise_or(scr_gray, MaskImgone, scr_gray);
+	//Mat ManotskImgone = Mat(EqualizeImg.rows, EqualizeImg.cols, CV_8U, Scalar(255));
+	//bitwise_or(scr_gray, MaskImgone, scr_gray);
 	rotateImg.copyTo(ImgROI);
+	/*bitwise_not(ImgROI, ImgROI);*/
+
 
 	Mat CalImg = ImgROI(Range::all(), Range(1, 1));//垂直投影，光照矫正
 	//CvPoint pt3 = cvPoint(maxRect.x-1,0);
@@ -172,21 +181,57 @@ int main(int argc, char* argv[])
 
 
 
-	Mat CalImgone = ImgROI(Range(1, 1), Range::all());//水平投影，光照矫正
-	reduce(ImgROI, CalImgone, 1, CV_REDUCE_AVG);
-	minMaxLoc(CalImgone, &min, &max);
-	int Maxcols = max;
-	Mat LightPluscols(CalImgone.rows, CalImgone.cols, CV_8U, Scalar(Maxcols));
-	absdiff(LightPluscols, CalImgone, LightPluscols);//找出补偿值
-	LightPluscols = LightPluscols.t();
-	Mat Lightcols;
-	for (int i = 0; i < ImgROI.cols; i++)//构建补偿矩阵
+	//Mat CalImgone = ImgROI(Range(1, 1), Range::all());//水平投影，光照矫正
+	//reduce(ImgROI, CalImgone, 1, CV_REDUCE_AVG);
+	//minMaxLoc(CalImgone, &min, &max);
+	//int Maxcols = max;
+	//Mat LightPluscols(CalImgone.rows, CalImgone.cols, CV_8U, Scalar(Maxcols));
+	//absdiff(LightPluscols, CalImgone, LightPluscols);//找出补偿值
+	//LightPluscols = LightPluscols.t();
+	//Mat Lightcols;
+	//for (int i = 0; i < ImgROI.cols; i++)//构建补偿矩阵
+	//{
+	//	Lightcols.push_back(LightPluscols);
+	//}
+	//Lightcols = Lightcols.t();
+	////Mat PoccessImg = ImgROI;
+	//add(ImgROI, Lightcols, ImgROI);//光照补偿
+
+	Mat UpImg = ImgROI(Rect(0, 0, ImgROI.cols, 400));
+	Mat MidImg = ImgROI(Rect(0, 400, ImgROI.cols, ImgROI.rows - 800));
+	Mat DownImg = ImgROI(Rect(0, ImgROI.rows - 400, ImgROI.cols, 400));
+
+	cv::MatND calcHist = h.getHistogram(MidImg);
+	Mat calcHistsub(256,1,CV_8U,Scalar(0));
+	vector<Point> Histnum;
+	for (int i = 0; i < 255; i++)
 	{
-		Lightcols.push_back(LightPluscols);
+		histopoint.x = calcHist.at<float>(i + 1) - calcHist.at<float>(i);
+		histopoint.y = i;
+		Histnum.push_back(histopoint);		
 	}
-	Lightcols = Lightcols.t();
-	//Mat PoccessImg = ImgROI;
-	add(ImgROI, Lightcols, ImgROI);//光照补偿
+
+	sort(Histnum.begin(), Histnum.end(), SortByM1);
+	int nonenum = 0;
+	ThresNum = 0;
+	Mat ThresROI;
+	do 
+	{
+		j++;
+		if (Histnum[Histnum.size() - j].y <= Histnum[Histnum.size() - 1].y)
+		{
+			ThresNum = Histnum[Histnum.size() - j].y;
+			threshold(MidImg, ThresROI, ThresNum, 255, CV_THRESH_BINARY);
+		}
+		nonenum = countNonZero(ThresROI);
+	} while (nonenum< 0.95*MidImg.rows*MidImg.cols);
+
+
+	/*double MaxVaule = 0;
+	double MinVaule = 0;
+	Point MaxPoint = Point(0, 0);
+	Point MinPoint = Point(0, 0);
+	minMaxLoc(calcHistsub, &MinVaule, &MaxVaule, &MinPoint, &MaxPoint,NULL);*/
 
 
 	imwrite("DImg.jpg", DImg);
@@ -351,4 +396,4 @@ int main(int argc, char* argv[])
 	PointTwo.clear();
 	PointLast.clear();
 	return 0;
-}
+}                                                 
