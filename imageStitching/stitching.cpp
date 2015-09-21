@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
 	{
 		if (histo.at<float>(i) != 0)
 		{
-			histopoint.x = histo.at<float>(i);
+			histopoint.x = int(histo.at<float>(i));
 			histopoint.y = i;
 			num.push_back(histopoint);
 		}
@@ -165,7 +165,7 @@ int main(int argc, char* argv[])
 	//rectangle(CalImg, pt4, pt6, Scalar(0), -1, 8);
 	double min, max;
 	minMaxLoc(CalImg, &min, &max);
-	int Maxrows = max;
+	int Maxrows = (int)max;
 	Mat LightPlusrows(CalImg.rows, CalImg.cols,CV_8U,Scalar(Maxrows));
 	absdiff(LightPlusrows, CalImg, LightPlusrows);//找出补偿值
 	//rectangle(LightPlus, pt5, pt3, Scalar(0), -1, 8);
@@ -201,12 +201,58 @@ int main(int argc, char* argv[])
 	Mat MidImg = ImgROI(Rect(0, 400, ImgROI.cols, ImgROI.rows - 800));
 	Mat DownImg = ImgROI(Rect(0, ImgROI.rows - 400, ImgROI.cols, 400));
 
+	Mat CannyImg,MidImgone, MidImgtwo;//边缘检测
+	DilateImg = getStructuringElement(MORPH_RECT, Size(5, 5));
+	dilate(MidImg, MidImgone, DilateImg);
+	erode(MidImg, MidImgtwo, DilateImg);
+	subtract(MidImgone, MidImgtwo, CannyImg);
+	/*DilateImg = getStructuringElement(MORPH_RECT, Size(10, 10));
+	dilate(CannyImg, CannyImg, DilateImg);
+	erode(CannyImg, CannyImg, DilateImg);*/
+	Canny(CannyImg, CannyImg, 50, 100);
+	DilateImg = getStructuringElement(MORPH_RECT, Size(10, 10));
+	dilate(CannyImg, CannyImg, DilateImg);
+	erode(CannyImg, CannyImg, DilateImg);
+	CvPoint pt3 = Point(0, 0);
+	CvPoint pt4 = Point(80, CannyImg.rows-1);
+
+	rectangle(CannyImg, pt3, pt4, Scalar(0), -1, 8);
+	//CannyImg = ~CannyImg;
+	vector<vector<cv::Point>> decontours;
+	cv::findContours(CannyImg, decontours, RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
+	
+	vector<vector<cv::Point>> needContour;
+	for (size_t i = 0; i < decontours.size(); i++)
+	{
+		if (decontours[i].size() > 90)
+		{
+			needContour.push_back(decontours[i]);
+		}
+	}
+	Mat deresult(CannyImg.size(),CV_8U,Scalar(0));
+	drawContours(deresult, needContour, -1, Scalar(255), 5);
+	Mat Watchresult = deresult.clone();
+	cvtColor(Watchresult, Watchresult, CV_GRAY2RGB);
+
+	for (size_t i = 0; i < needContour.size(); i++)//将缺陷部分标记出来
+	{
+		RotatedRect box = minAreaRect(needContour[i]);
+		Point2f vertex[4];
+		box.points(vertex);
+		for (int j = 0; j < 4; j++)
+		{
+			line(Watchresult, vertex[j], vertex[(j + 1) % 4], Scalar(0, 0, 255), 8);
+		}
+	}
+	//RotatedRect box = minAreaRect(needContour);
+	//Point2f vertex[4];
+	//box.points(vertex);
 	cv::MatND calcHist = h.getHistogram(MidImg);
 	Mat calcHistsub(256,1,CV_8U,Scalar(0));
 	vector<Point> Histnum;
 	for (int i = 0; i < 255; i++)
 	{
-		histopoint.x = calcHist.at<float>(i + 1) - calcHist.at<float>(i);
+		histopoint.x = int(calcHist.at<float>(i + 1) - calcHist.at<float>(i));
 		histopoint.y = i;
 		Histnum.push_back(histopoint);		
 	}
