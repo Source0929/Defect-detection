@@ -55,10 +55,10 @@ int main(int argc, char* argv[])
 		cout << "Value" << i << "=" << histo.at<float>(i) << endl;
 	}
 		
-	for (int i = 1; i < num.size(); i++)
+	for (int i = 2; i < num.size(); i++)
 	{
-		if (num[i].x < num[i-1].x)
-			if (num[i].x < num[i+1].x)
+		if (num[i].x <= num[i - 1].x && num[i - 1].x <= num[i - 2].x)
+			if (num[i].x <= num[i + 1].x && num[i + 1].x <= num[i +2].x)
 			{
 				ThresNum = num[i].y;
 				break;
@@ -128,6 +128,40 @@ int main(int argc, char* argv[])
 	Mat ImgROI = scr_gray(Rect(pt1, pt2));//寻找旋转参数
 	cv::Point2f center;
 
+	/*Mat findImg(ImgROI.size(), CV_8U, Scalar(255));*/
+	
+	vector<Point> leftbound;
+	Point boundpoint;
+	int leftx = 1;
+	int rightx = 1000;
+	for (int i = 1; i < scr_gray.rows; i=i + 50)
+	{
+		Mat findImg = ThresholdImg(Rect(leftx,i, rightx,1));
+		if (countNonZero(findImg) < rightx - leftx)
+		{
+			boundpoint.x = leftx+countNonZero(findImg) - 1;
+			boundpoint.y = i;
+			leftx = boundpoint.x - 1 - 50;
+			rightx = boundpoint.x - 1 + 50;
+			leftbound.push_back(boundpoint);
+		}
+	}
+	Vec4f lines;
+	fitLine(leftbound, lines, CV_DIST_L2 ,0, 0.01,0.01);
+	double d = sqrt((double)lines[0] * lines[0] + (double)lines[1] * lines[1]);
+	lines[0] /= d;
+	lines[1] /= d;
+	Point pt5, pt6;
+	pt5.x = cvRound(lines[2] + 5000 * lines[0]);
+	pt5.y = cvRound(lines[3] + 5000 * lines[1]);
+	pt6.x = cvRound(lines[2] - 5000 * lines[0]);
+	pt6.y = cvRound(lines[3] - 5000 * lines[1]);
+	cvtColor(ThresholdImg, ThresholdImg, CV_GRAY2RGB);
+	line(ThresholdImg,pt5,pt6,Scalar(55,100,195),8,CV_AA);
+
+
+
+
 	//CvPoint pt3 = cvPoint(100, ImgROI.rows);
 	//CvPoint pt4 = cvPoint(0, ImgROI.rows-100);
 	//CvPoint pt5 = cvPoint(ImgROI.cols, ImgROI.rows-150);
@@ -138,10 +172,10 @@ int main(int argc, char* argv[])
 	//reduce(ImgROI, MaxImg, 0, CV_REDUCE_MIN);
 	//int Colnum = countNonZero(MaxImg);
 	//Mat ColImg = SpliROI.colRange(Colnum, Colnum).clone();
-	center.x = 194;
-	center.y = 9575;
+	center.x = leftbound.back().x-pt1.x;
+	center.y = leftbound.back().y;
 	//int AngleH = countNonZero(ZeroROI);
-	double angle = -0.3973;  // 旋转角度  
+	double angle = (180*atan(lines[1]/lines[0])/CV_PI)-90;  // 旋转角度  
 	double k = 1; // 缩放尺度 
 	
 	Mat rotateMat;
@@ -234,16 +268,33 @@ int main(int argc, char* argv[])
 	Mat Watchresult = deresult.clone();
 	cvtColor(Watchresult, Watchresult, CV_GRAY2RGB);
 
-	for (size_t i = 0; i < needContour.size(); i++)//将缺陷部分标记出来
+	//for (size_t i = 0; i < needContour.size(); i++)//将缺陷部分标记出来
+	//{
+	//	RotatedRect box = minAreaRect(needContour[i]);
+	//	Point2f vertex[4];
+	//	box.points(vertex);
+	//	for (int j = 0; j < 4; j++)
+	//	{
+	//		line(Watchresult, vertex[j], vertex[(j + 1) % 4], Scalar(0, 0, 255), 8);
+	//	}
+	//}
+	Mat AvgImg;
+	for (size_t i = 0; i < needContour.size(); i++)
 	{
-		RotatedRect box = minAreaRect(needContour[i]);
-		Point2f vertex[4];
-		box.points(vertex);
-		for (int j = 0; j < 4; j++)
-		{
-			line(Watchresult, vertex[j], vertex[(j + 1) % 4], Scalar(0, 0, 255), 8);
-		}
+		Rect box = boundingRect(needContour[i]);
+		CvPoint pt7 = cvPoint(box.x, box.y);
+		CvPoint pt8 = cvPoint(box.x + box.width, box.y + box.height);
+		Mat boxImg = Watchresult(Rect(pt7,pt8));
+		Mat boxImgone = boxImg(Range::all(),Range(1,1));
+		reduce(boxImg, boxImgone, 0, CV_REDUCE_AVG);
+		boxImg.push_back(boxImgone);
+		stringstream strstr;
+		strstr << i << ".png";
+		imwrite(strstr.str(), boxImg);
+
 	}
+
+
 	//RotatedRect box = minAreaRect(needContour);
 	//Point2f vertex[4];
 	//box.points(vertex);
